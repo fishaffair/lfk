@@ -19,6 +19,7 @@ Complete list of all keybindings in `lfk`. All keybindings can be overridden in 
 | `x` | At resource types level: pin, hide, or show the selected type (action menu) |
 | `0` / `1` / `2` | Jump to clusters / types / resources level, per cluster and both ways |
 | `J` / `K` | Scroll preview pane down / up |
+| `n` / `N` | Search: next / previous match; outside search: jump to namespace of the selected resource |
 | `o` / `O` | Jump to owner/controller / open Object Explorer |
 | `c` | Jump to a pod's resource claim, cycling through multiple claims on repeated presses |
 | `Backspace` | Jump back through teleport history |
