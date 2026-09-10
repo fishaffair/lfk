@@ -10,11 +10,23 @@ import (
 	"github.com/janosmiko/lfk/internal/ui"
 )
 
-// constraintsViewportHeight is the number of table rows visible at once —
-// shared by the key handler (scroll math) and the renderer (page size) so
-// they agree on what "one page" means.
+// constraintsViewportHeight is the number of lines inside the fullscreen
+// box. constraintsDataHeight derives the actual row budget from it.
 func (m Model) constraintsViewportHeight() int {
 	return max(m.height-4, 3)
+}
+
+// constraintsDataHeight is the viewport minus the banner and header lines,
+// shared by the key handler and the renderer so both agree on one page.
+func (m Model) constraintsDataHeight() int {
+	return max(m.constraintsViewportHeight()-2, 1)
+}
+
+// constraintsContentWidth is the interior width content lines wrap to,
+// shared by the banner and the row/column sizing so both truncate to the
+// same box.
+func (m Model) constraintsContentWidth() int {
+	return max(m.width-4, 20)
 }
 
 func (m Model) viewConstraints() string {
@@ -26,7 +38,7 @@ func (m Model) viewConstraints() string {
 	} else if m.constraints.err != nil {
 		body = append(body, ui.ErrorStyle.Render("  "+ui.SanitizeTerminalText(m.constraints.err.Error())))
 	} else {
-		body = append(body, constraintsBanner(m.constraints.report.Skipped, m.constraints.report.Failed))
+		body = append(body, constraintsBanner(m.constraints.report.Skipped, m.constraints.report.Failed, m.constraintsContentWidth()))
 		body = append(body, m.renderConstraintsRows()...)
 	}
 
@@ -40,10 +52,10 @@ func (m Model) viewConstraints() string {
 	return lipgloss.JoinVertical(lipgloss.Left, title, content, m.constraintsHintBar())
 }
 
-// constraintsBanner names the sources the scan couldn't read — one line,
-// never a per-source row implying "absent". Denied and failed sources are
-// named separately so an RBAC gap doesn't read as a bug, or vice versa.
-func constraintsBanner(skipped, failed []string) string {
+// constraintsBanner names the sources the scan couldn't read, denied and
+// failed separately so an RBAC gap doesn't read as a bug, or vice versa.
+// Truncated to width: constraintsDataHeight reserves it exactly one line.
+func constraintsBanner(skipped, failed []string, width int) string {
 	if len(skipped) == 0 && len(failed) == 0 {
 		return ""
 	}
@@ -54,7 +66,8 @@ func constraintsBanner(skipped, failed []string) string {
 	if len(failed) > 0 {
 		parts = append(parts, "failed: "+strings.Join(sanitizedConstraintNames(failed), ", "))
 	}
-	return ui.StatusWarning.Render("  skipped (" + strings.Join(parts, "; ") + ")")
+	line := "  skipped (" + strings.Join(parts, "; ") + ")"
+	return ui.StatusWarning.Render(ui.Truncate(line, width))
 }
 
 func sanitizedConstraintNames(names []string) []string {
@@ -65,18 +78,23 @@ func sanitizedConstraintNames(names []string) []string {
 	return out
 }
 
+// renderConstraintsRows renders the header line plus one line per visible
+// row. The header always leads and is never part of the scrolled range,
+// which visibleRows and the cursor index without it.
 func (m Model) renderConstraintsRows() []string {
 	rows := m.constraints.visibleRows()
+	cols := constraintsColumns(m.constraintsContentWidth(), rows)
+	header := constraintsHeaderLine(cols)
+
 	if len(rows) == 0 {
-		return []string{ui.DimStyle.Render("  no constraints found")}
+		return []string{header, ui.DimStyle.Render("  no constraints found")}
 	}
-	width := max(m.width-4, 20)
-	height := m.constraintsViewportHeight() - 1 // banner line
+	height := m.constraintsDataHeight()
 	scroll := min(max(m.constraints.scroll, 0), max(len(rows)-1, 0))
 	end := min(scroll+height, len(rows))
 
-	cols := constraintsColumns(width)
-	out := make([]string, 0, max(end-scroll, 0))
+	out := make([]string, 0, max(end-scroll, 0)+1)
+	out = append(out, header)
 	for i := scroll; i < end; i++ {
 		out = append(out, formatConstraintRow(rows[i], i == m.constraints.cursor, cols))
 	}
@@ -89,14 +107,59 @@ type constraintColumns struct {
 	source, kind, name, headroom, detail, line int
 }
 
-// constraintsColumns hands cells back to the detail column, widest first,
-// until the row fits. Gaps between the five columns cost 5 cells.
-func constraintsColumns(width int) constraintColumns {
+const (
+	constraintHeaderSource   = "SOURCE"
+	constraintHeaderKind     = "KIND"
+	constraintHeaderName     = "NAME"
+	constraintHeaderHeadroom = "HEADROOM"
+	constraintHeaderDetail   = "DETAIL"
+)
+
+// constraintCells is one row's plain, sanitized cell text, shared between
+// column-width measurement and row rendering so they never disagree.
+type constraintCells struct {
+	source, kind, name, headroom, detail string
+}
+
+func constraintRowCells(row k8s.ConstraintRow) constraintCells {
+	nsName := ui.SanitizeTerminalText(row.Namespace)
+	if row.Name != "" {
+		if nsName != "" {
+			nsName += "/"
+		}
+		nsName += ui.SanitizeTerminalText(row.Name)
+	}
+	return constraintCells{
+		source:   row.Source,
+		kind:     ui.SanitizeTerminalText(row.Kind),
+		name:     nsName,
+		headroom: row.Headroom,
+		detail:   ui.SanitizeTerminalText(row.Detail),
+	}
+}
+
+// constraintsColumns sizes Source/Kind/Name/Headroom to their widest cell,
+// shrinks them toward their floors widest-first until Detail keeps at
+// least detailFloor cells, then hands Detail whatever remains.
+func constraintsColumns(width int, rows []k8s.ConstraintRow) constraintColumns {
 	const (
 		gaps        = 5
 		detailFloor = 10
 	)
-	cols := constraintColumns{source: 9, kind: 26, name: 28, headroom: 10, line: width - 1}
+	cols := constraintColumns{
+		source:   lipgloss.Width(constraintHeaderSource),
+		kind:     lipgloss.Width(constraintHeaderKind),
+		name:     lipgloss.Width(constraintHeaderName),
+		headroom: lipgloss.Width(constraintHeaderHeadroom),
+		line:     width - 1,
+	}
+	for _, row := range rows {
+		c := constraintRowCells(row)
+		cols.source = max(cols.source, lipgloss.Width(c.source))
+		cols.kind = max(cols.kind, lipgloss.Width(c.kind))
+		cols.name = max(cols.name, lipgloss.Width(c.name))
+		cols.headroom = max(cols.headroom, lipgloss.Width(c.headroom))
+	}
 
 	shrinkable := []*int{&cols.name, &cols.kind, &cols.headroom, &cols.source}
 	floors := []int{6, 6, 4, 4}
@@ -111,24 +174,30 @@ func constraintsColumns(width int) constraintColumns {
 	return cols
 }
 
+func constraintsHeaderLine(cols constraintColumns) string {
+	line := fmt.Sprintf("%-*s %-*s %-*s %-*s  %s",
+		cols.source, ui.Truncate(constraintHeaderSource, cols.source),
+		cols.kind, ui.Truncate(constraintHeaderKind, cols.kind),
+		cols.name, ui.Truncate(constraintHeaderName, cols.name),
+		cols.headroom, ui.Truncate(constraintHeaderHeadroom, cols.headroom),
+		ui.Truncate(constraintHeaderDetail, cols.detail),
+	)
+	line = ui.Truncate(line, cols.line)
+	return " " + ui.DimStyle.Bold(true).Render(line)
+}
+
 func formatConstraintRow(row k8s.ConstraintRow, isCursor bool, cols constraintColumns) string {
 	gutter := " "
 	if isCursor {
 		gutter = ui.YamlCursorIndicatorStyle.Render("▎")
 	}
-	nsName := ui.SanitizeTerminalText(row.Namespace)
-	if row.Name != "" {
-		if nsName != "" {
-			nsName += "/"
-		}
-		nsName += ui.SanitizeTerminalText(row.Name)
-	}
+	c := constraintRowCells(row)
 	line := fmt.Sprintf("%-*s %-*s %-*s %-*s  %s",
-		cols.source, ui.Truncate(row.Source, cols.source),
-		cols.kind, ui.Truncate(ui.SanitizeTerminalText(row.Kind), cols.kind),
-		cols.name, ui.Truncate(nsName, cols.name),
-		cols.headroom, ui.Truncate(row.Headroom, cols.headroom),
-		ui.Truncate(ui.SanitizeTerminalText(row.Detail), cols.detail),
+		cols.source, ui.Truncate(c.source, cols.source),
+		cols.kind, ui.Truncate(c.kind, cols.kind),
+		cols.name, ui.Truncate(c.name, cols.name),
+		cols.headroom, ui.Truncate(c.headroom, cols.headroom),
+		ui.Truncate(c.detail, cols.detail),
 	)
 	// The floors can still overrun a very narrow terminal, and a row wider
 	// than the box wraps into the border.
