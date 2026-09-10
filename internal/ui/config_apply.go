@@ -15,12 +15,9 @@ import (
 )
 
 // applyColorscheme selects a built-in colorscheme if specified in config.
-//
 // The colorscheme field supports two formats:
-//
 //  1. Plain name – "dracula"
 //     Applies the scheme and leaves dark/light switching disabled.
-//
 //  2. Ghostty-style dual-mode – "dark:Rose Pine,light:Rose Pine Dawn"
 //     Parses each comma-separated segment for a "dark:" or "light:" prefix.
 //     Both, one, or neither segment may be present. Order does not matter.
@@ -509,7 +506,6 @@ func applyConfigMaps(cfg configFile, abbr map[string]string) {
 			}
 		}
 	}
-
 	// Bridge resource_columns into views as a deprecated alias. views: wins when
 	// both are present for the same key. A single deprecation warning is emitted
 	// if any bridging occurs (not once per entry).
@@ -576,7 +572,6 @@ func bridgeResourceColumnsToViews(cfg configFile) bool {
 // applyRightsizingDefaults validates the rightsizing_defaults config section
 // and pushes accepted values into the model package-level vars consumed by
 // executeActionRightsizing's sticky-then-config-then-builtin fallback chain.
-//
 // A nil section is a no-op (omitting rightsizing_defaults must NOT clobber an
 // already-set value - important for tests and future reload paths). Invalid
 // strategy literals or off-preset headroom values are dropped with a warning;
@@ -742,7 +737,6 @@ func schedulerKindByName(name string) (scheduler.Kind, bool) {
 // Invalid entries are dropped rather than failing config load — a typo
 // in one set should not prevent lfk from starting. Last-name-wins on
 // duplicates so the user can override a global set per-project.
-//
 // Per-set context existence in the kubeconfig and namespace presence are
 // NOT checked here: existence depends on the kubeconfig (which the ui
 // package doesn't see), and namespace can come from the CLI. Both are
