@@ -16,7 +16,7 @@ Prefer a local copy? Point `$schema` at a relative or absolute path instead of t
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `appearance` | object | *(see Appearance section)* | Visual settings group: `colorscheme`, `icons`, `no_color`, `transparent_background`, `min_contrast_ratio`, `dim_overlay`, `row_status_tint`. Canonical home for these knobs. See [Appearance](#appearance). |
+| `appearance` | object | *(see Appearance section)* | Visual settings group: `colorscheme`, `icons`, `no_color`, `transparent_background`, `min_contrast_ratio`, `dim_overlay`, `row_status_tint`, `layout`. Canonical home for these knobs. See [Appearance](#appearance). |
 | `colorscheme` | string | `"tokyonight-storm"` | **Deprecated** — use `appearance.colorscheme`. Built-in color scheme name (460+ available). Press `T` to browse. Supports dual-mode syntax for auto dark/light switching: `"dark:X,light:Y"`. Custom `theme` overrides are applied on top. |
 | `transparent_background` | bool | `false` | **Deprecated** — use `appearance.transparent_background`. Use the terminal's own background for bars. Selection highlights remain opaque. |
 | `icons` | string | `"auto"` | **Deprecated** — use `appearance.icons`. Icon display mode. One of: `"auto"` (detects Nerd Font terminals; default), `"unicode"`, `"nerdfont"` (Material Design Icons; requires Nerd Font in terminal), `"simple"` (ASCII labels), `"emoji"`, or `"none"`. Unknown values fall back to `"unicode"`. Can be overridden at runtime by the `LFK_ICONS` environment variable. |
@@ -71,6 +71,7 @@ Prefer a local copy? Point `$schema` at a relative or absolute path instead of t
 | `delete_propagation_policy` | string | `"background"` | Cascade policy the delete confirm starts on. `background`: delete now, garbage collector removes dependents (kubectl's default). `foreground`: keep the object until dependents are gone. `orphan`: leave dependents running. `none`: send no policy, letting the API server apply its per-resource default. `Tab` cycles it per delete; force delete clamps `none` to `background` because it runs through `kubectl`. |
 | `dim_overlay` | bool | `true` | **Deprecated** — use `appearance.dim_overlay`. Fade the rest of the screen while any overlay is up. Set to `false` for terminals where SGR faint looks awkward; no-op when `no_color: true`. |
 | `row_status_tint` | string | `"foreground"` | **Deprecated** — use `appearance.row_status_tint`. See [Appearance](#appearance). |
+| `layout` | string | `"normal"` | **Deprecated** — use `appearance.layout`. Default explorer layout for new tabs. One of: `"normal"`, `"sidebar_hidden"`, `"fullscreen"`. |
 | `scrolloff` | int | `5` | Number of lines to keep visible above/below the cursor when scrolling. Used by all views with cursor-based navigation. |
 | `mouse` | bool | `true` | Capture mouse input for click navigation, scroll, and tab switching. Set to `false` to allow native terminal text selection. Also available as `--no-mouse` CLI flag. |
 | `read_only` | bool | `false` | Disable all mutating actions (delete, edit, scale, restart, exec, port-forward, drain, cordon, etc.) globally. Per-context overrides under `clusters.<name>.read_only` and the `--read-only` CLI flag take precedence. See [Read-Only Mode](usage.md#read-only-mode). |
@@ -143,7 +144,7 @@ the columns stay aligned. Nothing to configure.
 
 ## Appearance
 
-Visual settings, grouped. The flat keys of the same name (`colorscheme`, `icons`, `no_color`, `transparent_background`, `min_contrast_ratio`, `dim_overlay`, `row_status_tint`) are deprecated aliases; when both a flat key and its `appearance` equivalent are set, `appearance` wins. The `theme` object (custom color overrides) and per-cluster overrides remain top-level.
+Visual settings, grouped. The flat keys of the same name (`colorscheme`, `icons`, `no_color`, `transparent_background`, `min_contrast_ratio`, `dim_overlay`, `row_status_tint`, `layout`) are deprecated aliases; when both a flat key and its `appearance` equivalent are set, `appearance` wins. The `theme` object (custom color overrides) and per-cluster overrides remain top-level.
 
 ```yaml
 appearance:
@@ -154,6 +155,7 @@ appearance:
   min_contrast_ratio: 0.0
   dim_overlay: true
   row_status_tint: foreground
+  layout: normal
 ```
 
 | Field | Type | Default | Description |
@@ -165,6 +167,7 @@ appearance:
 | `min_contrast_ratio` | float | `0.0` | Readability knob in `[0.0, 1.0]`. See [Minimum Contrast Ratio](#minimum-contrast-ratio). |
 | `dim_overlay` | bool | `true` | Fade the screen behind overlays. No-op when `no_color: true`. |
 | `row_status_tint` | string | `"foreground"` | Emphasize failed/progressing rows as a fallback for when the Status cell is not visible. See [Row status tint](#row-status-tint) below. |
+| `layout` | string | `"normal"` | Default explorer layout for new tabs. One of: `"normal"` (three-column), `"sidebar_hidden"` (middle + right only), `"fullscreen"` (middle only). The `F` key cycles through these modes at runtime. |
 
 `icons` also decides how the which-key panel and the help screen's key column draw keys: Nerd Font keycaps (`󰘴 D`), Unicode symbols (`⌃D`), or names (`ctrl+d`).
 

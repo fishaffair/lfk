@@ -68,6 +68,7 @@ scrolloff: 9
 confirm_on_exit: false
 delete_propagation_policy: orphan
 dim_overlay: false
+layout: sidebar_hidden
 row_status_tint: background
 transparent_background: true
 mouse: false
@@ -255,6 +256,7 @@ func TestLoadConfig_AllSettingsWired(t *testing.T) {
 	assert.False(t, ConfigConfirmOnExit, "confirm_on_exit")
 	assert.Equal(t, model.DeletePropagationOrphan, ConfigDeletePropagationPolicy, "delete_propagation_policy")
 	assert.False(t, ConfigDimOverlay, "dim_overlay")
+	assert.Equal(t, LayoutSidebarHidden, ConfigExplorerLayout, "layout")
 	assert.Equal(t, RowStatusTintBackground, ConfigRowStatusTint, "row_status_tint")
 	assert.True(t, ConfigTransparentBg, "transparent_background")
 	assert.False(t, ConfigMouse, "mouse")
@@ -508,6 +510,7 @@ var wiringCoveredFields = map[string]string{
 	"confirm_on_exit":            "TestLoadConfig_AllSettingsWired",
 	"delete_propagation_policy":  "TestLoadConfig_AllSettingsWired + TestDeletePropagationPolicy_InvalidFallsBack",
 	"dim_overlay":                "TestLoadConfig_AllSettingsWired",
+	"layout":                     "TestLoadConfig_AllSettingsWired",
 	"row_status_tint":            "TestLoadConfig_AllSettingsWired + TestRowStatusTint_InvalidFallsBack",
 	"transparent_background":     "TestLoadConfig_AllSettingsWired",
 	"mouse":                      "TestLoadConfig_AllSettingsWired",

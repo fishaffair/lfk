@@ -154,6 +154,9 @@ func applyConfigOptions(cfg configFile) {
 		ConfigDimOverlay = *cfg.DimOverlay
 	}
 	applyRowStatusTint(cfg.RowStatusTint)
+	if cfg.Layout != "" {
+		applyExplorerLayout(&cfg.Layout)
+	}
 	if cfg.TransparentBg != nil {
 		ConfigTransparentBg = *cfg.TransparentBg
 	}
@@ -405,6 +408,19 @@ func applyTailLines(src *int, dst *int) {
 func applyBoolPtr(src *bool, dst *bool) {
 	if src != nil {
 		*dst = *src
+	}
+}
+
+// applyExplorerLayout sets the default explorer layout for new tabs.
+// Valid values: "normal", "sidebar_hidden", "fullscreen". Invalid values
+// are silently ignored so the compiled default stays active.
+func applyExplorerLayout(src *string) {
+	if src == nil {
+		return
+	}
+	switch *src {
+	case LayoutNormal, LayoutSidebarHidden, LayoutFullscreen:
+		ConfigExplorerLayout = *src
 	}
 }
 

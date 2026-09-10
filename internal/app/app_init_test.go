@@ -73,6 +73,79 @@ func TestNewModel_SeedsHideSecurityBadgesFromConfig(t *testing.T) {
 	}
 }
 
+// appearance.layout seeds the explorer layout from launch: the first frame
+// renders from the Model-level fields (tabs[0] is only picked up on a tab
+// switch via loadTab), so they must honour the config default.
+func TestNewModel_SeedsExplorerLayoutFromConfig(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	orig := ui.ConfigExplorerLayout
+	defer func() { ui.ConfigExplorerLayout = orig }()
+
+	ui.ConfigExplorerLayout = ui.LayoutSidebarHidden
+	m := NewModel(k8s.NewTestClient(nil, nil), StartupOptions{})
+	if !m.hideLeftPane {
+		t.Fatal("appearance.layout=sidebar_hidden must seed m.hideLeftPane")
+	}
+	if m.fullscreenMiddle {
+		t.Fatal("appearance.layout=sidebar_hidden must not set m.fullscreenMiddle")
+	}
+	if !m.tabs[0].hideLeftPane {
+		t.Fatal("appearance.layout=sidebar_hidden must seed tabs[0].hideLeftPane")
+	}
+
+	ui.ConfigExplorerLayout = ui.LayoutFullscreen
+	m = NewModel(k8s.NewTestClient(nil, nil), StartupOptions{})
+	if !m.fullscreenMiddle {
+		t.Fatal("appearance.layout=fullscreen must seed m.fullscreenMiddle")
+	}
+	if m.hideLeftPane {
+		t.Fatal("appearance.layout=fullscreen must not set m.hideLeftPane")
+	}
+
+	ui.ConfigExplorerLayout = ui.LayoutNormal
+	m = NewModel(k8s.NewTestClient(nil, nil), StartupOptions{})
+	if m.hideLeftPane || m.fullscreenMiddle {
+		t.Fatal("appearance.layout=normal must leave both layout toggles cleared")
+	}
+}
+
+// Session restore must preserve the explorer layout instead of resetting it
+// to the appearance.layout default: NewModel and buildSessionTabState already
+// seed the default, and re-applying it on restore would clobber an F-key
+// toggle the user pressed while the session was still loading.
+func TestRestoreSingleTabSession_PreservesExplorerLayout(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	orig := ui.ConfigExplorerLayout
+	defer func() { ui.ConfigExplorerLayout = orig }()
+	ui.ConfigExplorerLayout = ui.LayoutNormal
+	contexts := []model.Item{{Name: "test-ctx", IsContext: true}}
+
+	// Seeded default (sidebar_hidden chosen at startup) survives restore.
+	m := basePush80Model()
+	m.hideLeftPane = true
+	m.tabs[0].hideLeftPane = true
+	mdl, _ := m.restoreSingleTabSession(&SessionState{Context: "test-ctx"}, contexts)
+	got := mdl.(Model)
+	if !got.hideLeftPane {
+		t.Fatal("restored session must preserve the seeded sidebar_hidden layout")
+	}
+	if got.fullscreenMiddle {
+		t.Fatal("restored session must not set fullscreenMiddle for sidebar_hidden")
+	}
+	if len(got.tabs) > 0 && !got.tabs[got.activeTab].hideLeftPane {
+		t.Fatal("restored session must leave the active tab layout alone")
+	}
+
+	// A runtime toggle during load also survives (not reset to the default).
+	m2 := basePush80Model()
+	m2.fullscreenMiddle = true
+	mdl2, _ := m2.restoreSingleTabSession(&SessionState{Context: "test-ctx"}, contexts)
+	got2 := mdl2.(Model)
+	if !got2.fullscreenMiddle || got2.hideLeftPane {
+		t.Fatal("restored session must preserve a runtime layout toggle, not reset it to the config default")
+	}
+}
+
 // A nil map here makes allowSparklineFetch's pointer-receiver stamp land on a
 // discarded copy through the value-receiver call chain, so the cluster range
 // query fires unthrottled on every watch tick (metrics_throttle.go).
