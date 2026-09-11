@@ -1,9 +1,13 @@
 package ui
 
 import (
+	"bytes"
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/janosmiko/lfk/internal/logger"
 )
 
 // snapshotAppearanceGlobals saves and restores the appearance-related runtime
@@ -148,4 +152,53 @@ func TestExplorerLayout_FlatAlias(t *testing.T) {
 	LoadConfig(path)
 
 	assert.Equal(t, LayoutSidebarHidden, ConfigExplorerLayout, "flat layout key applied")
+}
+
+// TestExplorerLayout_CaseAndWarning covers case-insensitive matching and the
+// unknown-value warning, asserting the warning names the key and accepted
+// values without echoing what the user typed.
+func TestExplorerLayout_CaseAndWarning(t *testing.T) {
+	tests := []struct {
+		name      string
+		raw       string
+		wantValue string
+		wantWarn  bool
+	}{
+		{
+			name:      "uppercase value accepted",
+			raw:       "FULLSCREEN",
+			wantValue: LayoutFullscreen,
+			wantWarn:  false,
+		},
+		{
+			name:      "unknown value keeps default and warns",
+			raw:       "hunter2-secret-layout",
+			wantValue: LayoutNormal,
+			wantWarn:  true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			snapshotAppearanceGlobals(t)
+
+			origLogger := logger.Logger
+			var buf bytes.Buffer
+			logger.Logger = slog.New(slog.NewTextHandler(&buf, nil))
+			t.Cleanup(func() { logger.Logger = origLogger })
+
+			path := writeConfigFile(t, "appearance:\n  layout: \""+tc.raw+"\"\n")
+			LoadConfig(path)
+
+			assert.Equal(t, tc.wantValue, ConfigExplorerLayout)
+
+			out := buf.String()
+			if tc.wantWarn {
+				assert.Contains(t, out, "appearance.layout", "warning must name the offending key")
+				assert.NotContains(t, out, tc.raw, "raw config value must not be logged")
+			} else {
+				assert.NotContains(t, out, "appearance.layout", "no warning expected for a valid value")
+			}
+		})
+	}
 }
