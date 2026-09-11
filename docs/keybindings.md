@@ -85,6 +85,7 @@ chords, which all start with `g`; re-point the ones you use at the new prefix.
 | `O` | Object Explorer (browse the selected resource's live object as a drill-in tree) |
 | `U` | RBAC permissions browser (can-i) |
 | `Shift+Z` | Open the cluster-wide Orphan overview |
+| `b` | What constrains this object (quotas, PDBs, priority, node placement, webhooks - Pod/Deployment/StatefulSet/DaemonSet/ReplicaSet/Job/CronJob/ReplicationController only) |
 | `C` | Session manager (save/switch/delete named workspace sessions) |
 | `Ctrl+G` | Finalizer search and remove |
 | `!` | Error log |
@@ -526,6 +527,20 @@ Live refresh defaults to on; set `object_explorer.live: false` to start paused. 
 | `>` | Toggle line wrapping (configurable via `toggle_wrap`) |
 | `?` | Which-key panel for this view — see [Which-Key Panel](#which-key-panel) |
 | `F1` | Full help |
+| `q` / `Esc` | Back to explorer |
+
+## Constraints View
+
+Press `b` on a resource to see what constrains it: ResourceQuotas and LimitRanges against its container requests, PodDisruptionBudgets, its PriorityClass and any preemption events, node selector / affinity / taint mismatches, and admission webhooks that would intercept it. Available only for kinds that carry a pod template: Pod, Deployment, StatefulSet, DaemonSet, ReplicaSet, Job, CronJob, ReplicationController. A row that names no single object (a node selector or affinity mismatch) can't be jumped to; a row for a real object (quota, PDB, PriorityClass, node, webhook config) can. Sources denied by RBAC are named in a `skipped (denied: ...)` banner instead of being silently omitted. A source that broke for any other reason is named as `failed: ...` in the same banner, and the rows other sources found stay visible, so a short list means unread sources, not absent constraints.
+
+| Key | Action |
+|---|---|
+| `j` / `k` | Move cursor down / up |
+| `g` / `G` | Jump to top / bottom |
+| `Ctrl+D` / `Ctrl+U` | Half page down / up |
+| `Enter` | Jump to the row's object |
+| `R` | Re-run the scan |
+| `?` | Which-key panel for this view — see [Which-Key Panel](#which-key-panel) |
 | `q` / `Esc` | Back to explorer |
 
 ## Log Viewer
@@ -1244,9 +1259,11 @@ Locked rows offer no choice — keeping them yields a manifest that will not app
 The template picker (`a`): `Enter` create, `/` filter, `d` delete the highlighted saved template after a confirmation, `Esc`/`q` close. `d` works on your own templates only — the built-ins have no file behind them.
 
 ### Pod actions
-`l` Tail Logs (last N lines + follow), `L` Logs (full), `s` Exec, `A` Attach, `B` Debug, `b` Debug Pod, `p` Port Forward, `c` Capture Traffic, `N` Network Policies (policies whose pod selector matches this pod), `S` Startup Analysis, `I` Crash Investigator, `v` Describe, `E` Edit, `z` Right-sizing, `r` Resize (in-place CPU/memory), `D` Delete, `X` Force Delete, `V` Events
+`l` Tail Logs (last N lines + follow), `L` Logs (full), `s` Exec, `A` Attach, `B` Debug, `b` Debug Pod, `p` Port Forward, `c` Capture Traffic, `N` Network Policies (policies whose pod selector matches this pod), `S` Startup Analysis, `I` Crash Investigator, `v` Describe, `E` Edit, `z` Right-sizing, `r` Resize (in-place CPU/memory), `Q` Quarantine / Restore, `D` Delete, `X` Force Delete, `V` Events
 
 The Resize overlay (`r`) edits each container's CPU/memory requests and limits in place, via the `pods/resize` subresource (Kubernetes 1.33+). Pod-level `spec.resources` shows read-only. `j`/`k` or `Tab` move between fields; `Enter` applies. A container whose `resizePolicy` requires `RestartContainer` is flagged before you confirm.
+
+Quarantine (`Q`) strips the label keys that the pod's Services select on, so they stop routing traffic to it without deleting it, and records what it removed in the `lfk.janosmiko.dev/quarantined-labels` annotation. Once quarantined, `Q` reads Restore instead and puts the labels back. Both go through a confirm box; a pod with no matching Service selector reports that there is nothing to quarantine instead of opening one.
 
 ### Deployment actions
 `l` Tail Logs (last N lines + follow), `L` Logs (full), `s` Exec, `A` Attach, `S` Scale, `r` Restart, `R` Rollback, `p` Port Forward, `v` Describe, `E` Edit, `z` Right-sizing, `D` Delete, `b` Debug Pod, `V` Events

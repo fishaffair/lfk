@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/janosmiko/lfk/internal/k8s"
 	"github.com/janosmiko/lfk/internal/model"
 )
 
@@ -35,6 +36,7 @@ func (m Model) handleConfirmOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 			m.overlay = overlayNone
 			m.blast.reset()
 			m.deps.reset()
+			m.quarantine.reset()
 			label := m.pendingAction
 			m.pendingAction = ""
 			m.confirmAction = ""
@@ -46,10 +48,14 @@ func (m Model) handleConfirmOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 		}
 		m.overlay = overlayNone
 		m.loading = true
-		// The figures belong to the action being committed here; a later
-		// confirm must not open showing them.
+		// The figures belong to the action being committed here. A later
+		// confirm must not open showing them. quarantineServices/Keys are
+		// captured before the reset, since the Quarantine branch below still needs them.
+		quarantineServices := m.quarantine.services
+		quarantineKeys := m.quarantine.keys
 		m.blast.reset()
 		m.deps.reset()
+		m.quarantine.reset()
 		action := m.pendingAction
 		m.pendingAction = ""
 		m.confirmAction = ""
@@ -109,6 +115,14 @@ func (m Model) handleConfirmOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 		case "Cancel Eviction":
 			m.addLogEntry("DBG", fmt.Sprintf("$ kubectl patch %s.longhorn.io %s --type merge -p '{\"spec\":{\"evictionRequested\":false}}'%s --context %s", rt.Resource, name, nsArg, ctx))
 			return m, m.setLonghornNodeEviction(false)
+		case model.ActionLabelQuarantine:
+			m.addLogEntry("DBG", fmt.Sprintf("$ kubectl patch pod %s --type merge -p '{\"metadata\":{\"labels\":{%s},\"annotations\":{%q:...}}}'%s --context %s",
+				name, quarantineNullLabelsJSON(quarantineKeys), k8s.QuarantinedLabelsAnnotation, nsArg, ctx))
+			return m, m.quarantinePodCmd(quarantineServices, quarantineKeys)
+		case model.ActionLabelRestore:
+			m.addLogEntry("DBG", fmt.Sprintf("$ kubectl patch pod %s --type merge -p '{\"metadata\":{\"labels\":{...}},\"annotations\":{%q:null}}}'%s --context %s",
+				name, k8s.QuarantinedLabelsAnnotation, nsArg, ctx))
+			return m, m.restorePodCmd()
 		}
 
 		// Regular delete.
@@ -135,6 +149,7 @@ func (m Model) handleConfirmOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 		m.pendingAction = ""
 		m.blast.reset()
 		m.deps.reset()
+		m.quarantine.reset()
 		m.resetBulkAction()
 		if returnToTaints {
 			m.overlay = overlayTaintEditor
@@ -166,6 +181,7 @@ func (m Model) handleConfirmTypeOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.
 		m.resetBulkAction()
 		m.blast.reset()
 		m.deps.reset()
+		m.quarantine.reset()
 		return m, nil
 	case "ctrl+c":
 		return m.closeTabOrQuit()
@@ -226,8 +242,8 @@ func (m Model) handleConfirmTypeOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.
 			case "Finalizer Remove":
 				m.loading = false
 				m.overlay = overlayFinalizerSearch
-				selectedCount := len(m.finalizerSearchSelected)
-				m.addLogEntry("DBG", fmt.Sprintf("Removing finalizer %q from %d resources", m.finalizerSearchPattern, selectedCount))
+				selectedCount := len(m.finalizerSearch.selected)
+				m.addLogEntry("DBG", fmt.Sprintf("Removing finalizer %q from %d resources", m.finalizerSearch.pattern, selectedCount))
 				return m, m.bulkRemoveFinalizer()
 			case "Disrupt":
 				// Karpenter NodeClaim disrupt: kubectl delete nodeclaim.

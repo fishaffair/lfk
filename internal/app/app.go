@@ -159,6 +159,7 @@ type Model struct {
 	hpaScale       hpaScaleState // HPA scale overlay: min/max bounds + target replicas
 	pvcCurrentSize string        // current size displayed in the PVC resize overlay
 	podResize      podResizeState
+	quarantine     quarantineState
 
 	// Port forward input state.
 	portForwardInput TextInput
@@ -329,6 +330,9 @@ type Model struct {
 	// selected resource's live object (Item.Raw), mirroring the API Explorer
 	// but showing actual values. Driven entirely from objectexplorer.go.
 	objectExplorerView objectExplorerState
+
+	// Full-screen "what constrains this object" view. See constraintsview.go.
+	constraints constraintsViewState
 
 	// objectExplorerReturnMode is the mode the Object Explorer returns to on
 	// q/esc. It is the explorer by default but the YAML viewer when the Object
@@ -782,14 +786,8 @@ type Model struct {
 	// canIState (embedded, not named) — Can-I/Who-Can RBAC explorer state. See cani_state.go.
 	canIState
 
-	// Finalizer search overlay state.
-	finalizerSearchPattern      string
-	finalizerSearchResults      []k8s.FinalizerMatch
-	finalizerSearchCursor       int
-	finalizerSearchSelected     map[string]bool // "ns/kind/name" keys
-	finalizerSearchLoading      bool
-	finalizerSearchFilter       string
-	finalizerSearchFilterActive bool
+	// Finalizer search overlay state. See finalizerSearchState in app_types.go.
+	finalizerSearch finalizerSearchState
 	// Column toggle overlay state. See columnToggleState in update_column_toggle.go.
 	columnToggleState
 	// Easter egg state (Konami, nyan, credits, kubetris).

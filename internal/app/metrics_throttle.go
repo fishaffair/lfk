@@ -41,8 +41,10 @@ func (m *Model) listMetricsCmds(kind string) []tea.Cmd {
 // run now, and stamps it when it does. metrics-server recomputes roughly every
 // 15s, so most 2s watch ticks refetch identical numbers. Only suppressed
 // refreshes are throttled, so a first load and a manual refresh always fetch.
+// The key carries the namespace scope, otherwise a namespace switch inside
+// the interval keeps showing the previous list's numbers.
 func (m *Model) allowMetricsFetch(kind string) bool {
-	key := m.nav.Context + "/" + kind
+	key := m.nav.Context + "/" + kind + sparklineScope(m, kind)
 	if interval := ui.ConfigMetricsInterval; interval > 0 && m.suppressBgtasks {
 		if last, ok := m.metricsLastFetch[key]; ok && time.Since(last) < interval {
 			return false
@@ -58,13 +60,15 @@ func (m *Model) allowMetricsFetch(kind string) bool {
 // sparklineScope returns the part of the throttle key that identifies which
 // series the range query asks for. Without it a namespace switch, or opening a
 // second pod's containers, reuses the previous stamp and the new view sits
-// without history until the interval expires.
+// without history until the interval expires. The full selection fingerprint
+// is used rather than the effective namespace, which is empty for every
+// multi-namespace selection and would make them share one stamp.
 func sparklineScope(m *Model, kind string) string {
 	switch kind {
 	case "Pod":
-		return "/" + m.effectiveNamespace()
+		return "/" + m.fetchFingerprint()
 	case "Container":
-		return "/" + m.effectiveNamespace() + "/" + m.nav.OwnedName
+		return "/" + m.fetchFingerprint() + "/" + m.nav.OwnedName
 	default:
 		// Node and Cluster queries are not namespaced, so the context already
 		// identifies them.
