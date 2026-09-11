@@ -519,6 +519,7 @@ func (m *Model) cloneCurrentTab() TabState {
 		selectionAnchor:         m.selectionAnchor,
 		fullscreenMiddle:        m.fullscreenMiddle,
 		fullscreenDashboard:     m.fullscreenDashboard,
+		hideLeftPane:            m.hideLeftPane,
 		dashboardPreview:        m.dashboardPreview,
 		dashboardEventsPreview:  m.dashboardEventsPreview,
 		monitoringPreview:       m.monitoringPreview,

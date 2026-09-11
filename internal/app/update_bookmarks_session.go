@@ -310,6 +310,10 @@ func buildSessionTabState(st *SessionTab, discovered []model.ResourceTypeEntry) 
 		tab.nav.Level = model.LevelClusters
 	}
 
+	// Seed the configured default layout so session-restored tabs honour
+	// appearance.layout just like freshly-created tabs do.
+	tab.hideLeftPane, tab.fullscreenMiddle = defaultExplorerLayout()
+
 	return tab
 }
 

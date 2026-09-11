@@ -448,6 +448,44 @@ func TestHandleKeyFCyclesLayout(t *testing.T) {
 	assert.False(t, result.hideLeftPane, "third F restores the full layout")
 }
 
+func TestHandleKeyFCyclesLayoutFromSidebarHidden(t *testing.T) {
+	m := baseExplorerModel()
+	m.hideLeftPane = true
+
+	// From sidebar_hidden -> fullscreen.
+	ret, _ := m.handleKey(runeKey('F'))
+	result := ret.(Model)
+	assert.True(t, result.fullscreenMiddle, "F from sidebar_hidden enters fullscreen")
+	assert.False(t, result.hideLeftPane, "F from sidebar_hidden clears hide-left")
+
+	// From fullscreen -> normal.
+	ret, _ = result.handleKey(runeKey('F'))
+	result = ret.(Model)
+	assert.False(t, result.fullscreenMiddle, "F from fullscreen restores normal")
+	assert.False(t, result.hideLeftPane, "F from fullscreen restores normal")
+
+	// From normal -> sidebar_hidden (cycle wraps).
+	ret, _ = result.handleKey(runeKey('F'))
+	result = ret.(Model)
+	assert.True(t, result.hideLeftPane, "F from normal enters sidebar_hidden")
+}
+
+func TestHandleKeyFCyclesLayoutFromFullscreen(t *testing.T) {
+	m := baseExplorerModel()
+	m.fullscreenMiddle = true
+
+	// From fullscreen -> normal.
+	ret, _ := m.handleKey(runeKey('F'))
+	result := ret.(Model)
+	assert.False(t, result.fullscreenMiddle, "F from fullscreen restores normal")
+	assert.False(t, result.hideLeftPane, "F from fullscreen restores normal")
+
+	// From normal -> sidebar_hidden.
+	ret, _ = result.handleKey(runeKey('F'))
+	result = ret.(Model)
+	assert.True(t, result.hideLeftPane, "F from normal enters sidebar_hidden")
+}
+
 // --- handleKey: ctrl+a toggles select all ---
 
 func TestHandleKeyCtrlASelectsAll(t *testing.T) {

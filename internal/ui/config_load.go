@@ -24,12 +24,13 @@ type configFile struct {
 	// used as a plain scheme name and dark/light switching is disabled.
 	// Custom theme overrides in the "theme" section are applied on top.
 	// Appearance groups the visual knobs (colorscheme, icons, no_color,
-	// transparent_background, min_contrast_ratio, dim_overlay). This is the
+	// transparent_background, min_contrast_ratio, dim_overlay, layout). This is the
 	// canonical home. The flat keys of the same name are deprecated aliases
 	// kept for backward compatibility. When both are set, the appearance group
 	// wins (it is merged down onto the flat fields at load time).
 	Appearance    *AppearanceConfig `json:"appearance" yaml:"appearance"`
 	Colorscheme   string            `json:"colorscheme" yaml:"colorscheme"`
+	Layout        string            `json:"layout" yaml:"layout"`
 	Theme         Theme             `json:"theme" yaml:"theme"`
 	Keybindings   Keybindings       `json:"keybindings" yaml:"keybindings"`
 	LogPath       string            `json:"log_path" yaml:"log_path"`
@@ -474,6 +475,7 @@ type AppearanceConfig struct {
 	MinContrastRatio *float64 `json:"min_contrast_ratio" yaml:"min_contrast_ratio"`
 	DimOverlay       *bool    `json:"dim_overlay" yaml:"dim_overlay"`
 	RowStatusTint    *string  `json:"row_status_tint" yaml:"row_status_tint"`
+	Layout           *string  `json:"layout" yaml:"layout"`
 }
 
 // mergeAppearanceConfig folds a present appearance group down onto the flat
@@ -499,11 +501,14 @@ func mergeAppearanceConfig(cfg configFile) configFile {
 	if a.MinContrastRatio != nil {
 		cfg.MinContrastRatio = a.MinContrastRatio
 	}
+	if a.DimOverlay != nil {
+		cfg.DimOverlay = a.DimOverlay
+	}
 	if a.RowStatusTint != nil {
 		cfg.RowStatusTint = *a.RowStatusTint
 	}
-	if a.DimOverlay != nil {
-		cfg.DimOverlay = a.DimOverlay
+	if a.Layout != nil {
+		cfg.Layout = *a.Layout
 	}
 	return cfg
 }

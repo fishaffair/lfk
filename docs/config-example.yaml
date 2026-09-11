@@ -8,12 +8,15 @@
 
 # ─── Appearance ──────────────────────────────────────────────────────────────
 # Visual settings, grouped. The flat keys of the same name below (colorscheme,
-# icons, no_color, transparent_background, min_contrast_ratio, dim_overlay) are
-# deprecated aliases; appearance wins when both are set. The `theme` block
-# (custom color overrides) stays top-level.
+# icons, no_color, transparent_background, min_contrast_ratio, dim_overlay,
+# layout) are deprecated aliases; appearance wins when both are set. The `theme`
+# block (custom color overrides) stays top-level.
 appearance:
   colorscheme: tokyonight-storm
   icons: auto
+  # layout: normal | sidebar_hidden | fullscreen
+  # Controls the default explorer layout for new tabs. The F key cycles
+  # through these modes at runtime.
   # no_color: false
   # transparent_background: false
   # min_contrast_ratio: 0.0

@@ -1090,6 +1090,8 @@ func TestCloneCurrentTab(t *testing.T) {
 		namespace:        "default",
 		filterText:       "nginx",
 		expandedGroup:    "Workloads",
+		hideLeftPane:     true,
+		fullscreenMiddle: true,
 	}
 
 	clone := m.cloneCurrentTab()
@@ -1103,6 +1105,8 @@ func TestCloneCurrentTab(t *testing.T) {
 	assert.Len(t, clone.rightItems, 1)
 	assert.Len(t, clone.leftItemsHistory, 1)
 	assert.True(t, clone.selectedItems["ns/pod"])
+	assert.True(t, clone.hideLeftPane, "hideLeftPane must carry into the clone")
+	assert.True(t, clone.fullscreenMiddle, "fullscreenMiddle must carry into the clone")
 
 	// Verify deep copy: modifying clone should not affect original.
 	clone.leftItems[0].Name = "modified"

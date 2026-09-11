@@ -1470,6 +1470,30 @@ func TestFinal2RestoreSessionSingleTab(t *testing.T) {
 	assert.True(t, rm.sessionRestored)
 }
 
+func TestBuildSessionTabState_HonoursConfigExplorerLayout(t *testing.T) {
+	// sidebar_hidden layout
+	t.Run("sidebarHidden", func(t *testing.T) {
+		ui.ConfigExplorerLayout = ui.LayoutSidebarHidden
+		tab := buildSessionTabState(&SessionTab{Context: "c"}, nil)
+		assert.True(t, tab.hideLeftPane)
+		assert.False(t, tab.fullscreenMiddle)
+	})
+	// fullscreen layout
+	t.Run("fullscreen", func(t *testing.T) {
+		ui.ConfigExplorerLayout = ui.LayoutFullscreen
+		tab := buildSessionTabState(&SessionTab{Context: "c"}, nil)
+		assert.False(t, tab.hideLeftPane)
+		assert.True(t, tab.fullscreenMiddle)
+	})
+	// normal layout (default)
+	t.Run("normal", func(t *testing.T) {
+		ui.ConfigExplorerLayout = ui.LayoutNormal
+		tab := buildSessionTabState(&SessionTab{Context: "c"}, nil)
+		assert.False(t, tab.hideLeftPane)
+		assert.False(t, tab.fullscreenMiddle)
+	})
+}
+
 func TestFinal2RestoreSingleTabSessionContextNotFound(t *testing.T) {
 	m := baseFinalModel()
 	sess := &SessionState{Context: "nonexistent"}

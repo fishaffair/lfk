@@ -32,6 +32,16 @@ func resolveStartupAllNamespaces(client *k8s.Client, contextName string) bool {
 	return ui.ConfigAllNamespaces
 }
 
+// defaultExplorerLayout maps the appearance.layout config default to the
+// startup explorer toggles: hideLeftPane hides only the left sidebar,
+// fullscreenMiddle hides both side columns. Single source of truth for every
+// freshly constructed Model/TabState — sessions don't persist the layout, so
+// these seed it instead of starting in the normal 3-pane view.
+func defaultExplorerLayout() (hideLeftPane, fullscreenMiddle bool) {
+	return ui.ConfigExplorerLayout == ui.LayoutSidebarHidden,
+		ui.ConfigExplorerLayout == ui.LayoutFullscreen
+}
+
 // NewModel creates the initial model.
 func NewModel(client *k8s.Client, opts StartupOptions) Model {
 	vp := newViewerPrefValues()
@@ -69,6 +79,10 @@ func NewModel(client *k8s.Client, opts StartupOptions) Model {
 	// Resolve which session to open: --session / LFK_SESSION, else the
 	// persisted active session, else the default workspace (session.yaml).
 	activeSession, pendingSession := loadStartupSession(opts.Session)
+	// Seed the explorer layout from appearance.layout: the first frame renders
+	// from the Model-level fields (tabs[0] is only picked up on a tab switch
+	// via loadTab), so both need the default.
+	hideLeftPane, fullscreenMiddle := defaultExplorerLayout()
 	m := Model{
 		client:   client,
 		demoMode: client.IsDemo(),
@@ -111,6 +125,8 @@ func NewModel(client *k8s.Client, opts StartupOptions) Model {
 		splitPreview:               ui.ConfigSplitPreview,
 		allNamespaces:              startupAllNamespaces,
 		watchMode:                  ui.ConfigWatchMode,
+		fullscreenMiddle:           fullscreenMiddle,
+		hideLeftPane:               hideLeftPane,
 		objectExplorerLive:         vp[prefObjectExplorerLive],
 		objectExplorerTree:         vp[prefObjectExplorerTree],
 		explainTreeWanted:          vp[prefAPIExplorerTree],
@@ -187,6 +203,8 @@ func NewModel(client *k8s.Client, opts StartupOptions) Model {
 			selectedItems:              make(map[string]bool),
 			selectionAnchor:            -1,
 			selectedNamespaces:         nil,
+			fullscreenMiddle:           fullscreenMiddle,
+			hideLeftPane:               hideLeftPane,
 		}},
 		activeTab:      0,
 		execMu:         &sync.Mutex{},

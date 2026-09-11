@@ -8,13 +8,19 @@
   "properties": {
     "appearance": {
       "type": ["object", "null"],
-      "description": "Visual settings group (colorscheme, icons, no_color, transparent_background, min_contrast_ratio, dim_overlay). Canonical home for these knobs. The flat keys of the same name are deprecated aliases. When both are set, appearance wins.",
+      "description": "Visual settings group (colorscheme, icons, no_color, transparent_background, min_contrast_ratio, dim_overlay, layout). Canonical home for these knobs. The flat keys of the same name are deprecated aliases. When both are set, appearance wins.",
       "$ref": "#/definitions/appearanceConfig"
     },
     "colorscheme": {
       "type": "string",
       "description": "Deprecated alias for appearance.colorscheme. Built-in color scheme name (e.g. \"tokyonight-storm\", \"dracula\", \"nord\"). Supports dual-mode syntax for auto dark/light switching: \"dark:X,light:Y\".",
       "default": "tokyonight-storm"
+    },
+    "layout": {
+      "type": "string",
+      "description": "Deprecated alias for appearance.layout. Default explorer layout for new tabs: normal (three-column), sidebar_hidden (middle + right only), or fullscreen (middle only).",
+      "enum": ["normal", "sidebar_hidden", "fullscreen"],
+      "default": "normal"
     },
     "theme": {
       "anyOf": [{ "$ref": "#/definitions/theme" }, { "type": "null" }]
@@ -970,6 +976,12 @@
           "enum": ["off", "foreground", "background"],
           "description": "Emphasize failed/progressing rows as a fallback for a hidden Status cell: foreground colors the row's Name cell only when the Status column is hidden (and the whole row when the Name column is also hidden), background adds a muted status-colored row background always, off keeps only the Status cell colored.",
           "default": "foreground"
+        },
+        "layout": {
+          "type": "string",
+          "enum": ["normal", "sidebar_hidden", "fullscreen"],
+          "description": "Default explorer layout for new tabs: normal (three-column), sidebar_hidden (middle + right only), or fullscreen (middle only). The F key cycles through these modes at runtime.",
+          "default": "normal"
         }
       }
     },

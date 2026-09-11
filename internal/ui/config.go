@@ -535,6 +535,19 @@ var ConfigConfirmOnExit = true
 // looks awkward.
 var ConfigDimOverlay = true
 
+// Explorer layout modes.
+const (
+	LayoutNormal        = "normal"
+	LayoutSidebarHidden = "sidebar_hidden"
+	LayoutFullscreen    = "fullscreen"
+)
+
+// ConfigExplorerLayout controls the default explorer layout for new tabs.
+// One of: "normal" (three-column, default), "sidebar_hidden" (middle+right
+// only), "fullscreen" (middle only). The F key cycles through these modes
+// at runtime.
+var ConfigExplorerLayout = LayoutNormal
+
 // ConfigLogTailLines controls how many log lines are initially loaded via
 // --tail (per container). Kept small by default — older history loads on
 // scroll-up — so opening logs on a multi-container pod doesn't dump tens of
