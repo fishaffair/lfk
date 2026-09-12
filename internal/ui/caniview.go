@@ -47,9 +47,11 @@ func RenderCanIView(groups []string, resources []model.CanIResource, groupCursor
 
 	hint := hintBar
 
-	// Column widths: left 20% (API group names rarely exceed 25 cols even
-	// for long group names like "apiextensions.k8s.io" — 25% wasted space),
-	// middle 80%.
+	// Column widths: left 20% (group names are short — "core (12)",
+	// "apps (5)" — and truncate cleanly), middle 80% so the fixed
+	// 42-col verb block leaves room for resource names. At 20% an
+	// 80-col terminal left only 4 cols for names ("dep~"), which read
+	// as missing strings.
 	usable := width - 4
 	leftW := max(10, usable*20/100)
 	middleW := max(10, usable-leftW)
@@ -61,7 +63,13 @@ func RenderCanIView(groups []string, resources []model.CanIResource, groupCursor
 	middleInner := max(5, middleW-colPad)
 
 	// Left column: API groups (always active/focused).
-	leftHeader := DimStyle.Bold(true).Render("API Groups")
+	// Narrow panes can't fit "API Groups" (10 cols) — it would wrap
+	// and steal a body row. Fall back to "Groups" instead.
+	leftHeaderText := "API Groups"
+	if leftInner < lipgloss.Width(leftHeaderText) {
+		leftHeaderText = "Groups"
+	}
+	leftHeader := DimStyle.Bold(true).Render(leftHeaderText)
 	leftLines := renderCanIGroups(groups, groupCursor, groupScroll, leftInner, contentHeight-1)
 	leftContent := leftHeader + "\n" + strings.Join(leftLines, "\n")
 	leftContent = PadToHeight(leftContent, contentHeight)
@@ -134,9 +142,12 @@ func canITotalVerbWidth() int {
 }
 
 // renderCanIMiddleHeader builds the header line aligned with the resource columns.
+// nameWidth floors at 1 (not 8): on an 80-col terminal the middle pane is
+// only ~50 cols wide against 42 cols of fixed verb indicators, so a floor
+// of 8 overshoots the pane by 4 cols and lipgloss wraps every row.
 func renderCanIMiddleHeader(width int) string {
 	verbWidth := canITotalVerbWidth()
-	nameWidth := max(width-verbWidth-4, 8)
+	nameWidth := max(width-verbWidth-4, 1)
 
 	// Build verb header with per-column widths matching the indicators.
 	verbLabels := make([]string, len(canIVerbs))
@@ -144,7 +155,8 @@ func renderCanIMiddleHeader(width int) string {
 		verbLabels[i] = fmt.Sprintf("%-*s", canIVerbColWidth(v.label), v.label)
 	}
 
-	return fmt.Sprintf("  %-*s  %s", nameWidth, "RESOURCE", strings.Join(verbLabels, ""))
+	header := fmt.Sprintf("  %-*s  %s", nameWidth, "RESOURCE", strings.Join(verbLabels, ""))
+	return Truncate(header, width)
 }
 
 // renderCanIGroups renders the API group list for the left column.
@@ -214,15 +226,15 @@ func renderCanIResources(resources []model.CanIResource, width, maxLines, scroll
 	end := min(scroll+maxLines, len(resources))
 
 	// Calculate name width: leave room for verb indicators + prefix (2) + gap (2).
+	// Floor at 1 (not 8) — see renderCanIMiddleHeader. The trailing
+	// Truncate on each row guarantees the line never exceeds the pane
+	// even when the fixed verb block alone is wider than a tiny pane.
 	verbWidth := canITotalVerbWidth()
-	nameWidth := max(width-verbWidth-4, 8)
+	nameWidth := max(width-verbWidth-4, 1)
 
 	for i := scroll; i < end; i++ {
 		r := resources[i]
-		name := r.Resource
-		if len(name) > nameWidth {
-			name = name[:nameWidth]
-		}
+		name := Truncate(r.Resource, nameWidth)
 
 		// Build verb indicator string with per-column widths.
 		verbParts := make([]string, 0, len(canIVerbs))
@@ -242,9 +254,9 @@ func renderCanIResources(resources []model.CanIResource, width, maxLines, scroll
 		}
 		verbStr := strings.Join(verbParts, "")
 
-		namePadded := fmt.Sprintf("%-*s", nameWidth, name)
+		namePadded := padRight(name, nameWidth)
 		namePart := NormalStyle.Render("  " + namePadded + "  ")
-		lines = append(lines, namePart+verbStr)
+		lines = append(lines, Truncate(namePart+verbStr, width))
 	}
 
 	for len(lines) < maxLines {

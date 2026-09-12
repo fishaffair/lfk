@@ -57,8 +57,8 @@ func RenderWhoCanView(p WhoCanViewParams) string {
 	headerRow := renderWhoCanHeaderRow(p.VerbCursor, p.NamespaceLabel, p.Width)
 
 	// Two columns: resources picker (left, 20%), subjects (right, rest).
-	// 20% matches caniview's leftW — resource names rarely exceed 20 cols
-	// so a wider picker just steals space from the subjects table where
+	// 20% matches caniview's leftW — resource names are short so a
+	// wider picker just steals space from the subjects table where
 	// long Via paths actually need it.
 	usable := max(p.Width-4, 20)
 	leftW := max(10, usable*20/100)
