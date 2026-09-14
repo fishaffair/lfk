@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"bytes"
+	"errors"
 	"log/slog"
 	"maps"
 	"testing"
@@ -470,6 +471,77 @@ func TestTerminateArgoWorkflow(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestArgoWorkflowVerbs_PatchApplied(t *testing.T) {
+	gvr := schema.GroupVersionResource{Group: "argoproj.io", Version: "v1alpha1", Resource: "workflows"}
+	tests := []struct {
+		name  string
+		call  func(c *Client) error
+		field string
+		want  any
+	}{
+		{"suspend", func(c *Client) error { return c.SuspendArgoWorkflow("", "default", "my-wf") }, "suspend", true},
+		{"resume", func(c *Client) error { return c.ResumeArgoWorkflow("", "default", "my-wf") }, "suspend", false},
+		{"stop", func(c *Client) error { return c.StopArgoWorkflow("", "default", "my-wf") }, "shutdown", "Stop"},
+		{"terminate", func(c *Client) error { return c.TerminateArgoWorkflow("", "default", "my-wf") }, "shutdown", "Terminate"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wf := &unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "argoproj.io/v1alpha1",
+					"kind":       "Workflow",
+					"metadata":   map[string]any{"name": "my-wf", "namespace": "default"},
+				},
+			}
+			dc := newFakeDynClient(wf)
+			c := newFakeClient(nil, dc)
+
+			require.NoError(t, tt.call(c))
+
+			got, err := dc.Resource(gvr).Namespace("default").Get(t.Context(), "my-wf", metav1.GetOptions{})
+			require.NoError(t, err)
+			spec, _ := got.Object["spec"].(map[string]any)
+			assert.Equal(t, tt.want, spec[tt.field])
+		})
+	}
+}
+
+func TestArgoWorkflowVerbs_PatchErrorWrapped(t *testing.T) {
+	tests := []struct {
+		name    string
+		call    func(c *Client) error
+		wantMsg string
+	}{
+		{"suspend", func(c *Client) error { return c.SuspendArgoWorkflow("", "default", "my-wf") }, "suspending workflow my-wf"},
+		{"resume", func(c *Client) error { return c.ResumeArgoWorkflow("", "default", "my-wf") }, "resuming workflow my-wf"},
+		{"stop", func(c *Client) error { return c.StopArgoWorkflow("", "default", "my-wf") }, "stopping workflow my-wf"},
+		{"terminate", func(c *Client) error { return c.TerminateArgoWorkflow("", "default", "my-wf") }, "terminating workflow my-wf"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wf := &unstructured.Unstructured{
+				Object: map[string]any{
+					"apiVersion": "argoproj.io/v1alpha1",
+					"kind":       "Workflow",
+					"metadata":   map[string]any{"name": "my-wf", "namespace": "default"},
+				},
+			}
+			dc := newFakeDynClient(wf)
+			dc.PrependReactor("patch", "workflows", func(k8stesting.Action) (bool, runtime.Object, error) {
+				return true, nil, errors.New("boom")
+			})
+			c := newFakeClient(nil, dc)
+
+			err := tt.call(c)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantMsg)
+			assert.Contains(t, err.Error(), "boom")
+		})
+	}
+}
+
 func TestResubmitArgoWorkflow(t *testing.T) {
 	wf := &unstructured.Unstructured{
 		Object: map[string]any{
@@ -688,7 +760,7 @@ func TestBuildDeploymentTree(t *testing.T) {
 	c := newFakeClient(nil, dc)
 
 	root := &model.ResourceNode{Name: "deploy", Kind: "Deployment", Namespace: "default"}
-	err := c.buildDeploymentTree(t.Context(), dc, "default", "deploy", root)
+	err := c.buildDeploymentTree(t.Context(), newTreeCache(dc), "default", "deploy", root)
 	require.NoError(t, err)
 	assert.Len(t, root.Children, 1)
 	assert.Equal(t, "ReplicaSet", root.Children[0].Kind)
@@ -715,7 +787,7 @@ func TestBuildPodOwnerTree(t *testing.T) {
 	c := newFakeClient(nil, dc)
 
 	root := &model.ResourceNode{Name: "my-sts", Kind: "StatefulSet", Namespace: "default"}
-	err := c.buildPodOwnerTree(t.Context(), dc, "default", "StatefulSet", "my-sts", root)
+	err := c.buildPodOwnerTree(t.Context(), newTreeCache(dc), "default", "StatefulSet", "my-sts", root)
 	require.NoError(t, err)
 	assert.Len(t, root.Children, 1)
 	assert.Equal(t, "Pod", root.Children[0].Kind)
@@ -738,7 +810,7 @@ func TestBuildCronJobTree(t *testing.T) {
 	c := newFakeClient(nil, dc)
 
 	root := &model.ResourceNode{Name: "my-cron", Kind: "CronJob", Namespace: "default"}
-	err := c.buildCronJobTree(t.Context(), dc, "default", "my-cron", root)
+	err := c.buildCronJobTree(t.Context(), newTreeCache(dc), "default", "my-cron", root)
 	require.NoError(t, err)
 	assert.Len(t, root.Children, 1)
 	assert.Equal(t, "Job", root.Children[0].Kind)
@@ -771,7 +843,7 @@ func TestBuildCronJobTree_LogsPodOwnerTreeError(t *testing.T) {
 	defer func() { logger.Logger = orig }()
 
 	root := &model.ResourceNode{Name: "my-cron", Kind: "CronJob", Namespace: "default"}
-	err := c.buildCronJobTree(t.Context(), dc, "default", "my-cron", root)
+	err := c.buildCronJobTree(t.Context(), newTreeCache(dc), "default", "my-cron", root)
 	require.NoError(t, err, "the tree must still render without the pods on failure")
 	require.Len(t, root.Children, 1)
 	assert.Equal(t, "Job", root.Children[0].Kind)
@@ -901,7 +973,7 @@ func TestBuildGenericOwnerTree(t *testing.T) {
 	c := newFakeClient(nil, dc)
 
 	root := &model.ResourceNode{Name: "my-cluster", Kind: "Cluster", Namespace: "default"}
-	err := c.buildGenericOwnerTree(t.Context(), dc, "default", "Cluster", "my-cluster", root)
+	err := c.buildGenericOwnerTree(t.Context(), newTreeCache(dc), "default", "Cluster", "my-cluster", root)
 	require.NoError(t, err)
 	assert.Greater(t, len(root.Children), 0)
 }

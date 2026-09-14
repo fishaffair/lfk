@@ -167,7 +167,7 @@ func renderWhoCanResourcePicker(resources []string, cursor, scroll, width, heigh
 	}
 
 	bodyHeight := max(height-1, 1) // -1 for header
-	scroll = whoCanClampScroll(scroll, len(resources), bodyHeight)
+	scroll = ClampScroll(scroll, len(resources), bodyHeight)
 	end := min(scroll+bodyHeight, len(resources))
 
 	lines := make([]string, 0, end-scroll)
@@ -195,20 +195,6 @@ func renderWhoCanResourceHeader(count, width int) string {
 		BarDimStyle.Bold(true).Render(fmt.Sprintf("  Resources (%d)", count)),
 		width,
 	)
-}
-
-// whoCanClampScroll snaps the requested scroll offset to a valid range
-// for the given list size and viewport. Doesn't try to keep the cursor
-// in view — handlers do that — only protects against stale offsets
-// that would otherwise show blank space past the end of the list.
-func whoCanClampScroll(scroll, total, bodyHeight int) int {
-	if total <= bodyHeight {
-		return 0
-	}
-	maxScroll := total - bodyHeight
-	scroll = max(scroll, 0)
-	scroll = min(scroll, maxScroll)
-	return scroll
 }
 
 // WhoCanScrollForCursor returns the new scroll offset that keeps
@@ -268,10 +254,10 @@ func renderWhoCanSubjects(rows []WhoCanRow, scroll int, loading bool, resource s
 	// Truncate header labels too — at narrow widths "NAMESPACE" alone
 	// overflows nsW and pushes the row past the column's inner area.
 	colHeader := fmt.Sprintf("  %-*s  %-*s  %-*s  %-*s",
-		nameW, whoCanTruncate("SUBJECT", nameW),
-		kindW, whoCanTruncate("KIND", kindW),
-		nsW, whoCanTruncate("NAMESPACE", nsW),
-		viaW, whoCanTruncate("VIA", viaW))
+		nameW, ansi.Truncate("SUBJECT", nameW, "…"),
+		kindW, ansi.Truncate("KIND", kindW, "…"),
+		nsW, ansi.Truncate("NAMESPACE", nsW, "…"),
+		viaW, ansi.Truncate("VIA", viaW, "…"))
 	// The per-column floors (nameW 10, viaW 8) add up to more than a
 	// very narrow pane has, so cut the assembled line as a backstop.
 	colHeaderLine := BarDimStyle.Bold(true).Render(Truncate(colHeader, width))
@@ -307,10 +293,10 @@ func renderWhoCanRow(r WhoCanRow, nameW, kindW, nsW, viaW int) string {
 		Foreground(lipgloss.Color(ColorPrimary)).
 		Background(BaseBg).
 		Bold(true)
-	nameCell := whoCanPadCellStyled(whoCanTruncate(r.Name, nameW), nameW, nameStyle)
-	kindCell := whoCanPadCellStyled(whoCanTruncate(r.Kind, kindW), kindW, BarNormalStyle)
-	nsCell := whoCanPadCellStyled(whoCanTruncate(ns, nsW), nsW, BarNormalStyle)
-	viaCell := whoCanPadCellStyled(whoCanTruncate(r.Via, viaW), viaW, BarNormalStyle)
+	nameCell := whoCanPadCellStyled(ansi.Truncate(r.Name, nameW, "…"), nameW, nameStyle)
+	kindCell := whoCanPadCellStyled(ansi.Truncate(r.Kind, kindW, "…"), kindW, BarNormalStyle)
+	nsCell := whoCanPadCellStyled(ansi.Truncate(ns, nsW, "…"), nsW, BarNormalStyle)
+	viaCell := whoCanPadCellStyled(ansi.Truncate(r.Via, viaW, "…"), viaW, BarNormalStyle)
 	return sep + nameCell + sep + kindCell + sep + nsCell + sep + viaCell
 }
 
@@ -341,22 +327,4 @@ func whoCanFitPlaceholder(s string, width int) string {
 		return s
 	}
 	return ansi.Truncate(s, width, "")
-}
-
-// whoCanTruncate trims a plain (non-ANSI) string to maxW columns,
-// appending "…" when cut. Kept private to this file under a unique
-// name so it doesn't collide with the existing padRight in
-// explorer_format.go (which is ANSI-aware in different ways).
-func whoCanTruncate(s string, maxW int) string {
-	if maxW <= 0 {
-		return ""
-	}
-	runes := []rune(s)
-	if len(runes) <= maxW {
-		return s
-	}
-	if maxW <= 1 {
-		return "…"
-	}
-	return string(runes[:maxW-1]) + "…"
 }

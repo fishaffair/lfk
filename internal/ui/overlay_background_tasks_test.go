@@ -109,6 +109,26 @@ func TestRenderBackgroundTasksOverlayFitsInWidthWideRows(t *testing.T) {
 	}
 }
 
+func TestRenderBackgroundTasksOverlayCJKKindStaysWithinColumn(t *testing.T) {
+	t.Parallel()
+	rows := []BackgroundTaskRow{
+		{
+			Status:    TaskStatusRunning,
+			Kind:      strings.Repeat("中", 6),
+			Name:      "x",
+			Target:    "y",
+			StartedAt: time.Now().Add(-5 * time.Second),
+		},
+	}
+	width := 60
+	innerW := width - 6
+	got := RenderBackgroundTasksOverlayWithSubtitle(rows, ModeRunning, "", 0, width, 15)
+	lines := strings.Split(got, "\n")
+	dataLine := lines[3]
+	assert.LessOrEqual(t, lipgloss.Width(dataLine), innerW,
+		"CJK data row must not exceed inner width %d (got %d): %q", innerW, lipgloss.Width(dataLine), dataLine)
+}
+
 func TestRenderBackgroundTasksOverlayLifecycleBreakdown(t *testing.T) {
 	t.Parallel()
 	// Footer shows the per-status breakdown so the user can see the
@@ -299,6 +319,41 @@ func TestRenderBackgroundTasksOverlay_QueuedRowsInUnifiedTable(t *testing.T) {
 	assert.Contains(t, got, "LOW")
 	assert.Contains(t, got, "Queued #1")
 	assert.Contains(t, got, "Queued #2")
+}
+
+// TestRenderBackgroundTasksOverlay_PriorityColumnHiddenWhenDisabled pins
+// that show_priority_in_tasks_overlay: false hides the PRIORITY column.
+func TestRenderBackgroundTasksOverlay_PriorityColumnHiddenWhenDisabled(t *testing.T) {
+	orig := scheduler.ConfigShowPriorityInOverlay
+	scheduler.ConfigShowPriorityInOverlay = false
+	defer func() { scheduler.ConfigShowPriorityInOverlay = orig }()
+
+	rows := []BackgroundTaskRow{
+		{Kind: "APIDiscovery", Priority: scheduler.PriorityCritical, Name: "API discovery", Target: "y", StartedAt: time.Now()},
+		{Kind: "ResourceList", Priority: scheduler.PriorityHigh, Name: "List Pods", Target: "y", StartedAt: time.Now()},
+	}
+	const width = 100
+	got := RenderBackgroundTasksOverlayWithSubtitle(rows, ModeRunning, "", 0, width, 15)
+
+	assert.NotContains(t, got, "PRIORITY")
+	assert.NotContains(t, got, "CRITICAL")
+	assert.NotContains(t, got, "HIGH")
+
+	lines := strings.Split(got, "\n")
+	const innerW = width - 6
+	var rowLine string
+	for _, line := range lines {
+		if strings.Contains(line, "ResourceList") && strings.Contains(line, "List Pods") {
+			rowLine = line
+			break
+		}
+	}
+	if rowLine == "" {
+		t.Fatalf("could not find data row in overlay output:\n%s", got)
+	}
+	rowW := lipgloss.Width(rowLine)
+	assert.Equal(t, innerW, rowW,
+		"other columns must absorb the freed width (got %d, want %d)", rowW, innerW)
 }
 
 func TestRenderBackgroundTasksOverlay_PriorityChips(t *testing.T) {

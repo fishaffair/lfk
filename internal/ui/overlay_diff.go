@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -15,9 +16,9 @@ type diffLine struct {
 	status byte   // '=' same, '<' only left, '>' only right, '~' both present but different
 }
 
-// computeDiff produces a line-by-line diff of two YAML texts using a simple
-// longest-common-subsequence algorithm, then pairs up the differences.
-func computeDiff(leftText, rightText string) []diffLine {
+// ComputeDiffLines produces a line-by-line diff of two YAML texts using a
+// simple longest-common-subsequence algorithm, then pairs up the differences.
+func ComputeDiffLines(leftText, rightText string) []diffLine {
 	leftLines := strings.Split(leftText, "\n")
 	rightLines := strings.Split(rightText, "\n")
 
@@ -76,16 +77,28 @@ func computeDiff(leftText, rightText string) []diffLine {
 	return result
 }
 
-// ComputeDiffLines is the exported wrapper for computeDiff.
-func ComputeDiffLines(left, right string) []diffLine {
-	return computeDiff(left, right)
+// diffTabWidth matches SingleLineCell's tab expansion (kv_editor.go) so a
+// tab-bearing line sizes and truncates the same way across viewers.
+const diffTabWidth = "    "
+
+// expandDiffTabs sizes width-based rendering (padRight, Truncate, WrapLine)
+// on tab-free text so a tab's terminal column advance isn't measured as
+// zero cells. Diffing, folding, and copy paths keep using ComputeDiffLines as-is.
+func expandDiffTabs(lines []diffLine) []diffLine {
+	out := make([]diffLine, len(lines))
+	for i, dl := range lines {
+		dl.left = strings.ReplaceAll(dl.left, "\t", diffTabWidth)
+		dl.right = strings.ReplaceAll(dl.right, "\t", diffTabWidth)
+		out[i] = dl
+	}
+	return out
 }
 
 // DiffViewTotalLines returns the total number of scrollable lines for a
 // side-by-side diff view after applying fold state. The header and separator
 // are rendered outside the scrollable area, so they are not counted here.
 func DiffViewTotalLines(left, right string, foldRegions []DiffFoldRegion, foldState []bool) int {
-	diffLines := computeDiff(left, right)
+	diffLines := ComputeDiffLines(left, right)
 	visLines := BuildVisibleDiffLines(diffLines, foldRegions, foldState)
 	return len(visLines)
 }
@@ -109,7 +122,7 @@ type DiffVisualParams struct {
 // currentMatchLine is the original diff line index of the current n/N match
 // (-1 means none). That line gets the distinct SelectedSearchHighlightStyle.
 func RenderDiffView(left, right, leftName, rightName string, scroll, width, height int, lineNumbers, wrap bool, searchQuery string, foldRegions []DiffFoldRegion, foldState []bool, searchMode bool, searchInput string, cursor, currentMatchLine int, vp DiffVisualParams, footerOverride string) string { //nolint:gocyclo // rendering function with inherent layout complexity
-	rawDiffLines := computeDiff(left, right)
+	rawDiffLines := expandDiffTabs(ComputeDiffLines(left, right))
 	visLines := BuildVisibleDiffLines(rawDiffLines, foldRegions, foldState)
 
 	// Styles for diff highlighting.
@@ -134,9 +147,9 @@ func RenderDiffView(left, right, leftName, rightName string, scroll, width, heig
 
 	// Build header.
 	gutterPad := strings.Repeat(" ", gutterWidth)
-	leftHeader := headerNameStyle.Render(truncateToWidth(leftName, colWidth))
-	rightHeader := headerNameStyle.Render(truncateToWidth(rightName, colWidth))
-	header := gutterPad + padToWidth(leftHeader, colWidth) + separatorStyle.Render(" | ") + gutterPad + padToWidth(rightHeader, colWidth)
+	leftHeader := headerNameStyle.Render(Truncate(leftName, colWidth))
+	rightHeader := headerNameStyle.Render(Truncate(rightName, colWidth))
+	header := gutterPad + padRight(leftHeader, colWidth) + separatorStyle.Render(" | ") + gutterPad + padRight(rightHeader, colWidth)
 
 	// Reserve lines for title, hint bar, border (top+bottom), header, and separator.
 	maxLines := max(height-6, 3)
@@ -249,7 +262,7 @@ func RenderDiffView(left, right, leftName, rightName string, scroll, width, heig
 // currentMatchLine is the original diff line index of the current n/N match
 // (-1 means none). That line gets the distinct SelectedSearchHighlightStyle.
 func RenderUnifiedDiffView(left, right, leftName, rightName string, scroll, width, height int, lineNumbers, wrap bool, searchQuery string, foldRegions []DiffFoldRegion, foldState []bool, searchMode bool, searchInput string, cursor, currentMatchLine int, vp DiffVisualParams, footerOverride string) string { //nolint:gocyclo // rendering function with inherent layout complexity
-	rawDiffLines := computeDiff(left, right)
+	rawDiffLines := expandDiffTabs(ComputeDiffLines(left, right))
 	visLines := BuildVisibleDiffLines(rawDiffLines, foldRegions, foldState)
 
 	// Styles.
@@ -306,7 +319,7 @@ func RenderUnifiedDiffView(left, right, leftName, rightName string, scroll, widt
 
 		// Truncate to the content width so the border never re-wraps the line.
 		prefix, text, style := unifiedLineParts(dl, uStyles)
-		plain := truncateToWidth(prefix+text, contentWidth)
+		plain := Truncate(prefix+text, contentWidth)
 		var content string
 		switch {
 		case isSelected:
@@ -317,7 +330,7 @@ func RenderUnifiedDiffView(left, right, leftName, rightName string, scroll, widt
 			content = style.Render(plain)
 		}
 		if isCursorLine && !vp.VisualMode {
-			content = RenderCursorAtCol(content, plain, vp.CursorCol)
+			content = RenderCursorAtCol(content, vp.CursorCol)
 		}
 		lines = append(lines, unifiedLine{text: gutter + content, plain: plain, visIdx: vi})
 	}
@@ -450,7 +463,7 @@ func RenderUnifiedDiffView(left, right, leftName, rightName string, scroll, widt
 // lines for a unified diff view after applying fold state. The --- and +++
 // header lines are always visible but not part of the cursor range.
 func UnifiedDiffViewTotalLines(left, right string, foldRegions []DiffFoldRegion, foldState []bool) int {
-	diffLines := computeDiff(left, right)
+	diffLines := ComputeDiffLines(left, right)
 	visLines := BuildVisibleDiffLines(diffLines, foldRegions, foldState)
 	return len(visLines)
 }
@@ -462,7 +475,7 @@ func UpdateDiffSearchMatches(left, right, query string, side int, unified bool) 
 	if query == "" {
 		return nil
 	}
-	diffLines := computeDiff(left, right)
+	diffLines := ComputeDiffLines(left, right)
 	var matches []int
 	for i, dl := range diffLines {
 		var text string
@@ -484,17 +497,10 @@ func UpdateDiffSearchMatches(left, right, query string, side int, unified bool) 
 	return matches
 }
 
-// DiffSearchColumnInLine returns the rune column of the first match of query
-// in the given diff line text, or -1 if not found.
-// Supports substring, regex, and fuzzy search modes.
-func DiffSearchColumnInLine(lineText, query string) int {
-	return FindColumnInLine(lineText, query)
-}
-
 // DiffVisibleIndexForOriginal finds the visible line index corresponding to
 // the given original diff line index, or -1 if hidden.
 func DiffVisibleIndexForOriginal(left, right string, foldRegions []DiffFoldRegion, foldState []bool, origIdx int) int {
-	diffLines := computeDiff(left, right)
+	diffLines := ComputeDiffLines(left, right)
 	visLines := BuildVisibleDiffLines(diffLines, foldRegions, foldState)
 	for i, vl := range visLines {
 		if vl.Original == origIdx {
@@ -509,13 +515,13 @@ func DiffVisibleIndexForOriginal(left, right string, foldRegions []DiffFoldRegio
 // For unified mode, it returns whichever side has content.
 // Returns empty string if the index is out of range or the line is a fold placeholder.
 func DiffLineTextAt(left, right string, foldRegions []DiffFoldRegion, foldState []bool, visibleIdx, side int, unified bool) string {
-	rawDiffLines := computeDiff(left, right)
+	rawDiffLines := ComputeDiffLines(left, right)
 	visLines := BuildVisibleDiffLines(rawDiffLines, foldRegions, foldState)
 	return DiffLineTextIn(rawDiffLines, visLines, visibleIdx, side, unified)
 }
 
 // DiffLineTextIn is DiffLineTextAt for a caller that already holds the computed
-// diff. computeDiff builds an O(nxm) LCS table, so a caller resolving several
+// diff. ComputeDiffLines builds an O(nxm) LCS table, so a caller resolving several
 // facts about the same diff (the which-key panel does: total lines, the fold
 // region at the cursor, the yank target) must reuse one pass rather than pay
 // for one per fact.
@@ -545,10 +551,10 @@ func DiffLineTextIn(rawDiffLines []diffLine, visLines []VisibleDiffLine, visible
 func applyDiffVisualSelection(leftPlain, rightPlain string, vp DiffVisualParams, visIdx, selStart, selEnd, colWidth int) (string, string) {
 	if vp.CursorSide == 0 {
 		leftResult := applyDiffVisualSide(leftPlain, vp, visIdx, selStart, selEnd)
-		rightResult := truncateToWidth(rightPlain, colWidth)
+		rightResult := Truncate(rightPlain, colWidth)
 		return leftResult, rightResult
 	}
-	leftResult := truncateToWidth(leftPlain, colWidth)
+	leftResult := Truncate(leftPlain, colWidth)
 	rightResult := applyDiffVisualSide(rightPlain, vp, visIdx, selStart, selEnd)
 	return leftResult, rightResult
 }
@@ -560,29 +566,62 @@ func applyDiffVisualSide(plainText string, vp DiffVisualParams, visIdx, selStart
 	return RenderVisualSelection(plainText, vp.VisualType, visIdx, selStart, selEnd, vp.VisualStart, vp.VisualCol, vp.CursorCol, colStart, colEnd)
 }
 
-// truncateToWidth truncates a string to fit within the given visual width.
-func truncateToWidth(s string, maxWidth int) string {
-	if lipgloss.Width(s) <= maxWidth {
+// trailingSGRRun matches a run of SGR sequences at the end of a string,
+// leadingSGRRun matches one at the start. ":" is included as a valid SGR
+// sub-parameter separator, e.g. colon-form truecolor \x1b[38:2::r:g:bm.
+var (
+	trailingSGRRun = regexp.MustCompile(`(?:\x1b\[[0-9;:]*m)+$`)
+	leadingSGRRun  = regexp.MustCompile(`^(?:\x1b\[[0-9;:]*m)+`)
+)
+
+// padWithinTrailingSGR inserts pad spaces before line's trailing SGR run
+// so the pad keeps that style instead of landing after the reset. pad<=0
+// is a no-op so an escape the matcher misses can't go negative here.
+func padWithinTrailingSGR(s string, pad int) string {
+	if pad <= 0 {
 		return s
 	}
-	// Progressively truncate until it fits.
-	runes := []rune(s)
-	for len(runes) > 0 {
-		runes = runes[:len(runes)-1]
-		if lipgloss.Width(string(runes)) <= maxWidth-1 {
-			return string(runes) + "~"
-		}
+	at := len(s)
+	if loc := trailingSGRRun.FindStringIndex(s); loc != nil {
+		at = loc[0]
 	}
-	return ""
+	return s[:at] + strings.Repeat(" ", pad) + s[at:]
 }
 
-// padToWidth pads a styled string with spaces to reach the desired visual width.
-func padToWidth(s string, targetWidth int) string {
-	w := lipgloss.Width(s)
-	if w >= targetWidth {
+// padWithinLeadingSGR inserts pad spaces after line's leading SGR run, the
+// style ansi.TruncateLeft carries over from before the cut. Same pad<=0
+// guard as padWithinTrailingSGR.
+func padWithinLeadingSGR(s string, pad int) string {
+	if pad <= 0 {
 		return s
 	}
-	return s + strings.Repeat(" ", targetWidth-w)
+	at := len(leadingSGRRun.FindString(s))
+	return s[:at] + strings.Repeat(" ", pad) + s[at:]
+}
+
+// truncateBgLeft truncates line to col cells, padding with a space when the
+// cut lands inside a wide rune (ansi.Truncate drops it whole) so the overlay
+// after it still starts exactly at col.
+func truncateBgLeft(line string, col int) string {
+	s := ansi.Truncate(line, col, "")
+	if w := lipgloss.Width(s); w < col {
+		s = padWithinTrailingSGR(s, col-w)
+	}
+	return s
+}
+
+// truncateBgRight truncates line to the cells from col onward. A wide rune
+// straddling col comes back whole (ansi.TruncateLeft never splits one), so
+// it is dropped and replaced with a space to keep the row at its full width.
+func truncateBgRight(line string, col int) string {
+	s := ansi.TruncateLeft(line, col, "")
+	want := max(lipgloss.Width(line)-col, 0)
+	if w := lipgloss.Width(s); w > want {
+		at := len(leadingSGRRun.FindString(s))
+		cluster, clusterWidth := ansi.FirstGraphemeCluster(s[at:], ansi.GraphemeWidth)
+		s = padWithinLeadingSGR(s[:at]+s[at+len(cluster):], want-(w-clusterWidth))
+	}
+	return s
 }
 
 // PlaceOverlayBottom anchors an overlay near the bottom edge of the background,
@@ -621,8 +660,8 @@ func PlaceOverlayBottom(width, height, marginBottom int, overlay, background str
 			continue
 		}
 		ovVisualWidth := lipgloss.Width(ovLine)
-		leftBg := ansi.Truncate(result[row], startCol, "")
-		rightBg := ansi.TruncateLeft(result[row], startCol+ovVisualWidth, "")
+		leftBg := truncateBgLeft(result[row], startCol)
+		rightBg := truncateBgRight(result[row], startCol+ovVisualWidth)
 		result[row] = leftBg + ovLine + rightBg
 	}
 	return strings.Join(result, "\n")
@@ -682,8 +721,8 @@ func PlaceOverlay(width, height int, overlay, background string) string {
 		}
 		bgLine := result[row]
 		ovVisualWidth := lipgloss.Width(ovLine)
-		leftBg := ansi.Truncate(bgLine, startCol, "")
-		rightBg := ansi.TruncateLeft(bgLine, startCol+ovVisualWidth, "")
+		leftBg := truncateBgLeft(bgLine, startCol)
+		rightBg := truncateBgRight(bgLine, startCol+ovVisualWidth)
 		result[row] = leftBg + ovLine + rightBg
 	}
 

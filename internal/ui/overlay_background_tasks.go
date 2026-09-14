@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/janosmiko/lfk/internal/app/scheduler"
 )
@@ -99,7 +100,8 @@ func RenderBackgroundTasksOverlayWithSubtitle(rows []BackgroundTaskRow, mode Bac
 	innerW := max(width-6, 20)
 	dataAreaH := VisibleRowsBackgroundTasks(height)
 
-	statusW, prioW, kindW, nameW, targetW := bgtColumnWidthsUnified(rows, innerW)
+	showPriority := scheduler.ConfigShowPriorityInOverlay
+	statusW, prioW, kindW, nameW, targetW := bgtColumnWidthsUnified(rows, innerW, showPriority)
 	lastColW := bgtLastColW
 
 	total := len(rows)
@@ -128,14 +130,16 @@ func RenderBackgroundTasksOverlayWithSubtitle(rows []BackgroundTaskRow, mode Bac
 	b.WriteString("\n\n")
 
 	// Header row.
-	header := fmt.Sprintf("%-*s  %-*s  %-*s  %-*s  %-*s  %-*s",
-		statusW, "STATUS",
-		prioW, "PRIORITY",
-		kindW, "KIND",
-		nameW, "NAME",
-		targetW, "TARGET",
-		lastColW, lastColHeader)
-	b.WriteString(headerStyle.Render(header))
+	headerCols := []string{fmt.Sprintf("%-*s", statusW, "STATUS")}
+	if showPriority {
+		headerCols = append(headerCols, fmt.Sprintf("%-*s", prioW, "PRIORITY"))
+	}
+	headerCols = append(headerCols,
+		fmt.Sprintf("%-*s", kindW, "KIND"),
+		fmt.Sprintf("%-*s", nameW, "NAME"),
+		fmt.Sprintf("%-*s", targetW, "TARGET"),
+		fmt.Sprintf("%-*s", lastColW, lastColHeader))
+	b.WriteString(headerStyle.Render(strings.Join(headerCols, "  ")))
 	b.WriteString("\n")
 
 	// Data rows — pad to dataAreaH so the box stays at a constant size.
@@ -144,12 +148,17 @@ func RenderBackgroundTasksOverlayWithSubtitle(rows []BackgroundTaskRow, mode Bac
 	for _, r := range visible {
 		statusText, statusStyle := bgtStatusCell(r, statusW, mode, dimStyle)
 		lastCol := bgtLastColCell(r, mode, now)
-		body := fmt.Sprintf("%-*s  %-*s  %-*s  %-*s  %-*s",
-			prioW, truncateBGT(priorityLabel(r.Priority), prioW),
-			kindW, truncateBGT(r.Kind, kindW),
-			nameW, truncateBGT(r.Name, nameW),
-			targetW, truncateBGT(r.Target, targetW),
-			lastColW, lastCol)
+		var bodyCols []string
+		if showPriority {
+			bodyCols = append(bodyCols, padRight(ansi.Truncate(priorityLabel(r.Priority), prioW, "…"), prioW))
+		}
+		bodyCols = append(bodyCols,
+			padRight(ansi.Truncate(r.Kind, kindW, "…"), kindW),
+			padRight(ansi.Truncate(r.Name, nameW, "…"), nameW),
+			padRight(ansi.Truncate(r.Target, targetW, "…"), targetW),
+			padRight(lastCol, lastColW),
+		)
+		body := strings.Join(bodyCols, "  ")
 		// Queued and finished rows render dimmer than running rows so
 		// the user's eye lands on what's actively executing.
 		bodyRendered := rowStyle.Render(body)
@@ -230,7 +239,7 @@ func bgtStatusCell(r BackgroundTaskRow, statusW int, mode BackgroundTaskOverlayM
 	switch r.Status {
 	case TaskStatusQueued:
 		txt := fmt.Sprintf("Queued #%d", r.Position)
-		return fmt.Sprintf("%-*s", statusW, truncateBGT(txt, statusW)), dim
+		return fmt.Sprintf("%-*s", statusW, ansi.Truncate(txt, statusW, "…")), dim
 	case TaskStatusFinished:
 		return fmt.Sprintf("%-*s", statusW, "Finished"), dim
 	default:
@@ -292,15 +301,22 @@ func VisibleRowsBackgroundTasks(height int) int {
 
 // bgtColumnWidthsUnified computes column widths for the unified table.
 // Returns (statusW, prioW, kindW, nameW, targetW). lastColW is fixed at
-// bgtLastColW.
-func bgtColumnWidthsUnified(rows []BackgroundTaskRow, innerW int) (int, int, int, int, int) {
+// bgtLastColW. showPriority=false drops prioW and its gap to 0.
+func bgtColumnWidthsUnified(rows []BackgroundTaskRow, innerW int, showPriority bool) (int, int, int, int, int) {
 	const minStatus, minPrio, minKind, minName, minTarget = 8, 4, 6, 6, 6
-	const totalGaps = 10 // 5 gaps * 2
+	numCols := 5
+	if showPriority {
+		numCols = 6
+	}
+	totalGaps := (numCols - 1) * 2
 
 	// "Queued #999" is 11 chars. Cap at 11 to bound the column. Most
 	// rows show "Running" (7) or "Finished" (8) or "Queued #N" (9-11).
 	statusW := minStatus
-	prioW := len("PRIORITY")
+	prioW := 0
+	if showPriority {
+		prioW = len("PRIORITY")
+	}
 	kindW := minKind
 	nameW := minName
 	targetW := minTarget
@@ -355,10 +371,12 @@ func bgtColumnWidthsUnified(rows []BackgroundTaskRow, innerW int) (int, int, int
 		kindW = max(kindW-(used-innerW), minKind)
 	}
 
-	// Third pass: trim prioW.
-	used = statusW + prioW + kindW + nameW + targetW + bgtLastColW + totalGaps
-	if used > innerW {
-		prioW = max(prioW-(used-innerW), minPrio)
+	// Third pass: trim prioW (only if the column is shown).
+	if showPriority {
+		used = statusW + prioW + kindW + nameW + targetW + bgtLastColW + totalGaps
+		if used > innerW {
+			prioW = max(prioW-(used-innerW), minPrio)
+		}
 	}
 
 	// Last resort: trim statusW.
@@ -388,18 +406,4 @@ func formatElapsedBGT(d time.Duration) string {
 		s := int(d.Seconds()) - m*60
 		return fmt.Sprintf("%dm %ds", m, s)
 	}
-}
-
-// truncateBGT shortens a string to max runes using a UTF-8-safe slice and
-// an ellipsis. Matches the rune-based truncation pattern used in other
-// lfk renderers.
-func truncateBGT(s string, max int) string {
-	runes := []rune(s)
-	if len(runes) <= max {
-		return s
-	}
-	if max <= 1 {
-		return string(runes[:max])
-	}
-	return string(runes[:max-1]) + "\u2026"
 }
