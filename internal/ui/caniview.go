@@ -47,11 +47,9 @@ func RenderCanIView(groups []string, resources []model.CanIResource, groupCursor
 
 	hint := hintBar
 
-	// Column widths: left 20% (group names are short — "core (12)",
-	// "apps (5)" — and truncate cleanly), middle 80% so the fixed
-	// 42-col verb block leaves room for resource names. At 20% an
-	// 80-col terminal left only 4 cols for names ("dep~"), which read
-	// as missing strings.
+	// Left 20%: group names are short and truncate cleanly, so the
+	// middle pane keeps what it can against the fixed 42-col verb
+	// block. Under a ~90-col terminal names still cut to "dep~".
 	usable := width - 4
 	leftW := max(10, usable*20/100)
 	middleW := max(10, usable-leftW)
@@ -94,11 +92,12 @@ func RenderCanIView(groups []string, resources []model.CanIResource, groupCursor
 // Who-Can title rows so the namespace/scope chip lands consistently
 // at the right edge across both modes. If the combined widths exceed
 // `width`, the right label is dropped (a half-shown label is more
-// confusing than no label).
+// confusing than no label) and the title is cut to fit.
 func joinTitleAndRightLabel(title, rightLabel string, width int) string {
 	if lipgloss.Width(title)+1+lipgloss.Width(rightLabel) > width {
-		// No room for the right label. Just return the title.
-		return title
+		// Who-Can's title plus its eight verb chips need 74 cols, so an
+		// 80-col terminal wraps this row and pushes the columns down.
+		return Truncate(title, width)
 	}
 	gap := max(width-lipgloss.Width(title)-lipgloss.Width(rightLabel), 1)
 	return title + BarNormalStyle.Render(strings.Repeat(" ", gap)) + rightLabel
@@ -155,7 +154,10 @@ func renderCanIMiddleHeader(width int) string {
 		verbLabels[i] = fmt.Sprintf("%-*s", canIVerbColWidth(v.label), v.label)
 	}
 
-	header := fmt.Sprintf("  %-*s  %s", nameWidth, "RESOURCE", strings.Join(verbLabels, ""))
+	// Truncate before padding: %-*s pads but never cuts, so a narrow
+	// pane kept the full 8-col label and shifted every verb column
+	// right of the indicator it labels.
+	header := fmt.Sprintf("  %s  %s", padRight(Truncate("RESOURCE", nameWidth), nameWidth), strings.Join(verbLabels, ""))
 	return Truncate(header, width)
 }
 

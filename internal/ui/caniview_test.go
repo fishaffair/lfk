@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/janosmiko/lfk/internal/model"
@@ -60,9 +61,15 @@ func TestRenderCanIMiddleHeader(t *testing.T) {
 		}
 	})
 
-	t.Run("narrow width still contains RESOURCE", func(t *testing.T) {
-		header := renderCanIMiddleHeader(40)
+	t.Run("keeps the RESOURCE label while the name column fits it", func(t *testing.T) {
+		header := renderCanIMiddleHeader(60)
 		assert.Contains(t, header, "RESOURCE")
+	})
+
+	t.Run("cuts the RESOURCE label once the name column is narrower", func(t *testing.T) {
+		header := renderCanIMiddleHeader(40)
+		assert.NotContains(t, header, "RESOURCE")
+		assert.LessOrEqual(t, lipgloss.Width(header), 40)
 	})
 }
 
@@ -263,6 +270,26 @@ func TestRenderCanIView(t *testing.T) {
 			}
 			header := renderCanIMiddleHeader(w)
 			assert.LessOrEqual(t, lipgloss.Width(header), w, "header must fit pane width %d", w)
+		}
+	})
+
+	t.Run("verb columns line up between header and resource rows", func(t *testing.T) {
+		resources := []model.CanIResource{
+			{Resource: "deployments", Verbs: map[string]bool{"get": true}},
+		}
+		// 50 is the middle pane on an 80-col terminal, where the name
+		// column shrinks below the width of the "RESOURCE" label.
+		for _, w := range []int{50, 60, 78, 120} {
+			header := ansi.Strip(renderCanIMiddleHeader(w))
+			row := ansi.Strip(renderCanIResources(resources, w, 1, 0)[0])
+
+			beforeGET, _, hasGET := strings.Cut(header, "GET")
+			rowIdx := strings.IndexAny(row, "✓?·")
+			if !hasGET || rowIdx < 0 {
+				t.Fatalf("no verb block at pane width %d: header=%q row=%q", w, header, row)
+			}
+			assert.Equal(t, lipgloss.Width(beforeGET), lipgloss.Width(row[:rowIdx]),
+				"verb block must start at the same column at pane width %d", w)
 		}
 	})
 }

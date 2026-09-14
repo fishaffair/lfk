@@ -272,7 +272,9 @@ func renderWhoCanSubjects(rows []WhoCanRow, scroll int, loading bool, resource s
 		kindW, whoCanTruncate("KIND", kindW),
 		nsW, whoCanTruncate("NAMESPACE", nsW),
 		viaW, whoCanTruncate("VIA", viaW))
-	colHeaderLine := BarDimStyle.Bold(true).Render(colHeader)
+	// The per-column floors (nameW 10, viaW 8) add up to more than a
+	// very narrow pane has, so cut the assembled line as a backstop.
+	colHeaderLine := BarDimStyle.Bold(true).Render(Truncate(colHeader, width))
 
 	bodyHeight := max(height-1, 1) // -1 for column header
 	scroll = max(scroll, 0)
@@ -283,7 +285,7 @@ func renderWhoCanSubjects(rows []WhoCanRow, scroll int, loading bool, resource s
 
 	body := make([]string, 0, end-scroll)
 	for _, r := range rows[scroll:end] {
-		body = append(body, renderWhoCanRow(r, nameW, kindW, nsW, viaW))
+		body = append(body, Truncate(renderWhoCanRow(r, nameW, kindW, nsW, viaW), width))
 	}
 	return colHeaderLine + "\n" + strings.Join(body, "\n")
 }
